@@ -787,11 +787,11 @@ void DrawCredits(Rectangle backButton, Vector2 mousePos) {
     
     // Draw placeholder credits text
     const char* credits[] = {
-        "Lorem ipsum dolor sit amet,",
-        "consetetur sadipscing elitr",
-        "sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat",
-        "no sea takimata sanctus est Lorem ipsum dolor sit amet.",
-        "Lorem ipsum dolor sit amet, consetetur sadipscing elitr"
+        "Team lead - Dzhuravlenko",
+        "Minesweeper developer - Dzhuravlenko and Vskyrda",
+        "Hippodrome developer - Ykharchenko",
+        "Menu/hub location developer, also combine all games together - Khubko",
+        "menu Design and coding - Vladiukova"
     };
     
     for (int i = 0; i < 5; i++) {
