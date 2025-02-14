@@ -1,0 +1,571 @@
+#include "raylib.h"
+#include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
+#include <stdlib.h>
+#include <time.h>
+
+// Game states
+typedef enum {
+    MAIN_GAME,
+    ROCKET_GAME,
+    STAR_GAME
+} GameState;
+
+GameState currentGame = MAIN_GAME;
+
+// Rocket game specific structs and variables
+typedef enum { WAITING, LAUNCHING, INCREASE_MULTIPLIER, GAME_OVER } RocketGameState;
+
+typedef struct {
+    int balance;
+    int bet;
+    float multiplier;
+    float y;
+    bool cashedOut;
+    RocketGameState state;
+    float randomMultiplier;
+} RocketGame;
+
+// Star game specific variables
+#define GRID_SIZE 4
+#define CELL_SIZE 100
+#define MINE_COUNT 5
+#define MENU_WIDTH 200
+
+typedef struct {
+    bool isMine;
+    bool isRevealed;
+    float multiplier;
+    int nearbyMines;
+    bool isHovered;
+} Cell;
+
+typedef struct {
+    Cell grid[GRID_SIZE][GRID_SIZE];
+    int balance;
+    int currentBet;
+    int currentWin;
+    bool gameOver;
+    bool gameWon;
+    bool betPlaced;
+    int selectedBetIndex;
+    int betValues[10];
+} StarGame;
+
+// Helper functions
+Rectangle getRect(Vector2 pos, int width, int height) {
+    return (Rectangle) { pos.x, pos.y, width, height };
+}
+
+void DrawHitbox(Vector2 pos, int width, int height, bool isColliding) {
+    Color outlineColor = isColliding ? RED : DARKGRAY;
+    DrawRectangleLinesEx(getRect(pos, width, height), 3, outlineColor);
+}
+
+bool checkAllCollisions(Rectangle playerRec, Rectangle squares[], int squareCount) {
+    for (int i = 0; i < squareCount; i++) {
+        if (CheckCollisionRecs(playerRec, squares[i])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void collidingController(Vector2 LookVect, Vector2* pos, Rectangle* playerRec, float speed) {
+    if (LookVect.x > 0) {
+        pos->x -= speed;
+        playerRec->x -= speed;
+    }
+    if (LookVect.x < 0) {
+        pos->x += speed;
+        playerRec->x += speed;
+    }
+    if (LookVect.y > 0) {
+        pos->y -= speed;
+        playerRec->y -= speed;
+    }
+    if (LookVect.y < 0) {
+        pos->y += speed;
+        playerRec->y += speed;
+    }
+}
+
+// Star game functions
+void InitializeStarGame(StarGame* game) {
+    // Initialize bet values
+    game->betValues[0] = 10;
+    game->betValues[1] = 20;
+    game->betValues[2] = 50;
+    game->betValues[3] = 100;
+    game->betValues[4] = 200;
+    game->betValues[5] = 500;
+    game->betValues[6] = 1000;
+    game->betValues[7] = 2000;
+    game->betValues[8] = 5000;
+    game->betValues[9] = 10000;
+    
+    // Initialize game state
+    game->balance = 1000;
+    game->currentBet = game->betValues[0];
+    game->currentWin = 0;
+    game->gameOver = false;
+    game->gameWon = false;
+    game->betPlaced = false;
+    game->selectedBetIndex = 0;
+
+    // Initialize grid
+    for (int i = 0; i < GRID_SIZE; i++) {
+        for (int j = 0; j < GRID_SIZE; j++) {
+            game->grid[i][j] = (Cell){
+                .isMine = false,
+                .isRevealed = false,
+                .multiplier = 1.0f,
+                .nearbyMines = 0,
+                .isHovered = false
+            };
+        }
+    }
+
+    // Place mines randomly
+    int minesPlaced = 0;
+    while (minesPlaced < MINE_COUNT) {
+        int x = rand() % GRID_SIZE;
+        int y = rand() % GRID_SIZE;
+        if (!game->grid[x][y].isMine) {
+            game->grid[x][y].isMine = true;
+            minesPlaced++;
+            
+            // Update nearby mine counts
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    int nx = x + dx;
+                    int ny = y + dy;
+                    if (nx >= 0 && nx < GRID_SIZE && ny >= 0 && ny < GRID_SIZE) {
+                        game->grid[nx][ny].nearbyMines++;
+                    }
+                }
+            }
+        }
+    }
+
+    // Set multipliers for non-mine cells
+    for (int i = 0; i < GRID_SIZE; i++) {
+        for (int j = 0; j < GRID_SIZE; j++) {
+            if (!game->grid[i][j].isMine) {
+                // Base multiplier increases with nearby mines
+                float baseMultiplier = 1.2f + (game->grid[i][j].nearbyMines * 0.3f);
+                // Add some randomness
+                float randomFactor = (float)(rand() % 50) / 100.0f;
+                game->grid[i][j].multiplier = baseMultiplier + randomFactor;
+            }
+        }
+    }
+}
+
+void RevealCell(StarGame* game, int x, int y) {
+    if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE || 
+        game->grid[x][y].isRevealed || game->gameOver) {
+        return;
+    }
+
+    // Place bet if not already placed
+    if (!game->betPlaced) {
+        if (game->balance < game->currentBet) return;
+        game->balance -= game->currentBet;
+        game->betPlaced = true;
+    }
+
+    game->grid[x][y].isRevealed = true;
+
+    if (game->grid[x][y].isMine) {
+        game->gameOver = true;
+        // Reveal all cells on game over
+        for (int i = 0; i < GRID_SIZE; i++) {
+            for (int j = 0; j < GRID_SIZE; j++) {
+                game->grid[i][j].isRevealed = true;
+            }
+        }
+    } else {
+        game->currentWin += (int)(game->currentBet * game->grid[x][y].multiplier);
+        
+        // Auto-reveal adjacent cells with no nearby mines
+        if (game->grid[x][y].nearbyMines == 0) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dy = -1; dy <= 1; dy++) {
+                    RevealCell(game, x + dx, y + dy);
+                }
+            }
+        }
+    }
+}
+
+// Rocket game functions
+void ResetRocketGame(RocketGame* game) {
+    game->bet = 0;
+    game->multiplier = 1.0f;
+    game->y = 450;
+    game->cashedOut = false;
+    game->state = WAITING;
+    game->randomMultiplier = (float)(rand() % 10 + 1);
+}
+
+int main(void) {
+    const int screenWidth = 1200;
+    const int screenHeight = 600;
+
+    InitWindow(screenWidth, screenHeight, "Multi-Game Hub");
+    SetTargetFPS(60);
+
+    // Load textures
+    Texture2D background = LoadTexture("map.png");
+    Texture2D playerTexture = LoadTexture("0.png");
+    Texture2D rocketBackground = LoadTexture("fon.png");
+    Texture2D rocketTexture = LoadTexture("raketka.png");
+    Texture2D hiddenTexture = LoadTexture("squere.png");
+    Texture2D starTexture = LoadTexture("zvezda.png");
+    Texture2D bombTexture = LoadTexture("bomb.png");
+
+    // Player setup
+    float speed = 2.75f;
+    Vector2 playerPos = { (float)screenWidth / 2, (float)screenHeight / 2 };
+    Vector2 playerLookVect = { 0, 0 };
+    Rectangle playerRec = getRect(playerPos, playerTexture.width, playerTexture.height);
+
+    // Square setup for main game
+    Rectangle topSquare = { screenWidth / 2 - 50, 30, 100, 100 };    // Star Game
+    Rectangle leftSquare = { 30, screenHeight / 2 - 50, 100, 100 };  // Rocket Game
+    Rectangle squares[] = { topSquare, leftSquare };
+    const int squareCount = 2;
+
+    // Rocket game setup
+    RocketGame rocketGame = { 1000, 0, 1.0f, 450, false, WAITING, (float)(rand() % 8 + 1) };
+    Rectangle buttonStart = { screenWidth/2 + 100, 500, 100, 40 };
+    Rectangle buttonCashOut = { screenWidth/2 + 220, 500, 100, 40 };
+    Rectangle buttonBack = { screenWidth/2 + 340, 500, 100, 40 };
+    char betString[10] = "";
+
+    // Star game setup
+    StarGame starGame;
+    InitializeStarGame(&starGame);
+
+    // Audio setup
+    InitAudioDevice();
+    Music bgMusic = LoadMusicStream("fon1.mp3");
+    Sound clickSound = LoadSound("klik1.wav");
+    Sound cashOutSound = LoadSound("cash.wav");
+    Sound startSound = LoadSound("go1.wav");
+
+    while (!WindowShouldClose()) {
+        Vector2 mousePos = GetMousePosition();
+
+        switch (currentGame) {
+            case MAIN_GAME: {
+                playerLookVect = (Vector2){ 0, 0 };
+                
+                if (IsKeyDown(KEY_RIGHT)) {
+                    playerLookVect.x = 1;
+                    playerPos.x += speed;
+                    playerRec.x += speed;
+                }
+                if (IsKeyDown(KEY_LEFT)) {
+                    playerLookVect.x = -1;
+                    playerPos.x -= speed;
+                    playerRec.x -= speed;
+                }
+                if (IsKeyDown(KEY_UP)) {
+                    playerLookVect.y = 1;
+                    playerPos.y -= speed;
+                    playerRec.y -= speed;
+                }
+                if (IsKeyDown(KEY_DOWN)) {
+                    playerLookVect.y = -1;
+                    playerPos.y += speed;
+                    playerRec.y += speed;
+                }
+
+                bool isColliding = checkAllCollisions(playerRec, squares, squareCount);
+                if (isColliding) {
+                    collidingController(playerLookVect, &playerPos, &playerRec, speed);
+                }
+
+                bool isNearTop = CheckCollisionCircleRec(playerPos, 50, topSquare);
+                bool isNearLeft = CheckCollisionCircleRec(playerPos, 50, leftSquare);
+
+                if (IsKeyPressed(KEY_E)) {
+                    if (isNearTop) {
+                        currentGame = STAR_GAME;
+                        InitializeStarGame(&starGame);
+                    }
+                    else if (isNearLeft) {
+                        currentGame = ROCKET_GAME;
+                        ResetRocketGame(&rocketGame);
+                        PlayMusicStream(bgMusic);
+                    }
+                }
+
+                BeginDrawing();
+                    ClearBackground(RAYWHITE);
+                    DrawTexture(background, 0, 0, WHITE);
+                    
+                    for (int i = 0; i < squareCount; i++) {
+                        DrawRectangleRec(squares[i], RED);
+                    }
+                    
+                    DrawTextureV(playerTexture, playerPos, RAYWHITE);
+                    DrawHitbox(playerPos, playerTexture.width, playerTexture.height, isColliding);
+                    
+                    if (isNearTop || isNearLeft) {
+                        DrawText("Press E to play", screenWidth / 2 - MeasureText("Press E to play", 20) / 2, 
+                                screenHeight / 2 - 20, 20, WHITE);
+                    }
+                EndDrawing();
+                break;
+            }
+            
+            case ROCKET_GAME: {
+                UpdateMusicStream(bgMusic);
+
+                if (IsKeyPressed(KEY_ESCAPE)) {
+                    currentGame = MAIN_GAME;
+                    StopMusicStream(bgMusic);
+                }
+                else {
+                    if (rocketGame.state == WAITING) {
+                        int key = GetKeyPressed();
+                        if (key >= '0' && key <= '9') {
+                            int length = strlen(betString);
+                            if (length < 9) {
+                                betString[length] = (char)key;
+                                betString[length + 1] = '\0';
+                            }
+                        }
+                        else if (key == KEY_BACKSPACE && strlen(betString) > 0) {
+                            betString[strlen(betString) - 1] = '\0';
+                        }
+
+                        if (strlen(betString) > 0) {
+                            rocketGame.bet = atoi(betString);
+                            if (rocketGame.bet > rocketGame.balance) {
+                                rocketGame.bet = rocketGame.balance;
+                                snprintf(betString, sizeof(betString), "%d", rocketGame.bet);
+                            }
+                        }
+
+                        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                            if (CheckCollisionPointRec(mousePos, buttonStart)) {
+                                if (rocketGame.balance >= rocketGame.bet && rocketGame.bet > 0) {
+                                    rocketGame.state = LAUNCHING;
+                                    rocketGame.balance -= rocketGame.bet;
+                                    PlaySound(startSound);
+                                }
+                            }
+                            else if (CheckCollisionPointRec(mousePos, buttonBack)) {
+                                currentGame = MAIN_GAME;
+                                StopMusicStream(bgMusic);
+                            }
+                        }
+                    }
+                    else if (rocketGame.state == LAUNCHING) {
+                        rocketGame.y -= 4;
+                        if (rocketGame.y <= screenHeight / 3) {
+                            rocketGame.state = INCREASE_MULTIPLIER;
+                        }
+                    }
+                    else if (rocketGame.state == INCREASE_MULTIPLIER) {
+                        rocketGame.multiplier += 0.02f;
+
+                        if (rocketGame.multiplier >= rocketGame.randomMultiplier) {
+                            rocketGame.state = GAME_OVER;
+                        }
+
+                        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                            if (CheckCollisionPointRec(mousePos, buttonCashOut)) {
+                                rocketGame.balance += (int)(rocketGame.bet * rocketGame.multiplier);
+                                rocketGame.cashedOut = true;
+                                rocketGame.state = GAME_OVER;
+                                PlaySound(cashOutSound);
+                            }
+                        }
+                    }
+                    else if (rocketGame.state == GAME_OVER) {
+                        ResetRocketGame(&rocketGame);
+                        betString[0] = '\0';
+                    }
+
+                    BeginDrawing();
+                        ClearBackground(RAYWHITE);
+                        DrawTexturePro(rocketBackground,
+                            (Rectangle){ 0, 0, rocketBackground.width, rocketBackground.height },
+                            (Rectangle){ screenWidth/2, 0, screenWidth/2, screenHeight },
+                            (Vector2){ 0, 0 }, 0.0f, WHITE);
+
+                        // Draw rocket
+                        DrawTexturePro(rocketTexture,
+                            (Rectangle){ 0, 0, rocketTexture.width, rocketTexture.height },
+                            (Rectangle){ screenWidth/2 + 200, (int)rocketGame.y,
+                                       rocketTexture.width / 15, rocketTexture.height / 15 },
+                            (Vector2){ 0, 0 }, 0.0f, WHITE);
+
+                        // Draw UI elements
+                        DrawText(TextFormat("Balance: %d", rocketGame.balance), screenWidth/2 + 20, 20, 20, WHITE);
+                        DrawText(TextFormat("Bet: %d", rocketGame.bet), screenWidth/2 + 20, 50, 20, WHITE);
+                        DrawText(TextFormat("x%.2f", rocketGame.multiplier), screenWidth/2 + 200, rocketGame.y - 30, 20, RED);
+
+                        DrawText("Enter Bet:", screenWidth/2 + 30, 500, 30, WHITE);
+                        DrawText(strlen(betString) > 0 ? betString : " ", screenWidth/2 + 200, 500, 30, WHITE);
+
+                        DrawRectangleRec(buttonStart, GREEN);
+                        DrawText("Start", buttonStart.x + 20, buttonStart.y + 10, 20, BLACK);
+
+                        DrawRectangleRec(buttonCashOut, RED);
+                        DrawText("Cash Out", buttonCashOut.x + 10, buttonCashOut.y + 10, 20, BLACK);
+
+                        DrawRectangleRec(buttonBack, BLUE);
+                        DrawText("Back", buttonBack.x + 30, buttonBack.y + 10, 20, BLACK);
+
+                        DrawText("Press ESC to return to main game", screenWidth/2 + 20, screenHeight - 30, 20, WHITE);
+                    EndDrawing();
+                }
+                break;
+            }
+            
+            case STAR_GAME: {
+                if (IsKeyPressed(KEY_ESCAPE)) {
+                    currentGame = MAIN_GAME;
+                }
+
+                // Handle mouse input for Star game
+                if (!starGame.gameOver && !starGame.gameWon && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                    Vector2 mousePos = GetMousePosition();
+                    
+                    // Check menu button clicks
+                    Rectangle betButton = { 20, 260, 160, 60 };
+                    Rectangle takeButton = { 20, 340, 160, 60 };
+                    Rectangle restartButton = { 20, 420, 160, 60 };
+
+                    if (CheckCollisionPointRec(mousePos, betButton) && !starGame.gameOver) {
+                        starGame.selectedBetIndex = (starGame.selectedBetIndex + 1) % 10;
+                        starGame.currentBet = starGame.betValues[starGame.selectedBetIndex];
+                        PlaySound(clickSound);
+                    }
+                    else if (CheckCollisionPointRec(mousePos, takeButton) && starGame.betPlaced) {
+                        starGame.balance += starGame.currentWin;
+                        starGame.currentWin = 0;
+                        starGame.betPlaced = false;
+                        InitializeStarGame(&starGame);
+                        PlaySound(cashOutSound);
+                    }
+                    else if (CheckCollisionPointRec(mousePos, restartButton) && starGame.gameOver) {
+                        InitializeStarGame(&starGame);
+                        PlaySound(clickSound);
+                    }
+                    // Handle grid clicks
+                    else if (mousePos.x >= MENU_WIDTH) {
+                        int gridX = (mousePos.x - MENU_WIDTH) / CELL_SIZE;
+                        int gridY = mousePos.y / CELL_SIZE;
+                        if (gridX >= 0 && gridX < GRID_SIZE && gridY >= 0 && gridY < GRID_SIZE) {
+                            RevealCell(&starGame, gridX, gridY);
+                            PlaySound(clickSound);
+                        }
+                    }
+                }
+
+                BeginDrawing();
+                    ClearBackground(RAYWHITE);
+                    
+                    // Draw grid and UI
+                    for (int i = 0; i < GRID_SIZE; i++) {
+                        for (int j = 0; j < GRID_SIZE; j++) {
+                            Rectangle cellRect = {
+                                MENU_WIDTH + i * CELL_SIZE,
+                                j * CELL_SIZE,
+                                CELL_SIZE,
+                                CELL_SIZE
+                            };
+
+                            // Update hover state
+                            starGame.grid[i][j].isHovered = CheckCollisionPointRec(mousePos, cellRect);
+
+                            // Draw cell
+                            Color cellColor = WHITE;
+                            if (!starGame.betPlaced && starGame.balance < starGame.currentBet) {
+                                cellColor = (Color){ 200, 200, 200, 100 };
+                            } else if (starGame.grid[i][j].isHovered && !starGame.grid[i][j].isRevealed) {
+                                cellColor = (Color){ 230, 230, 230, 255 };
+                            }
+
+                            if (starGame.grid[i][j].isRevealed) {
+                                if (starGame.grid[i][j].isMine) {
+                                    DrawTexturePro(bombTexture,
+                                        (Rectangle){ 0, 0, bombTexture.width, bombTexture.height },
+                                        cellRect, (Vector2){ 0, 0 }, 0, cellColor);
+                                } else {
+                                    DrawTexturePro(starTexture,
+                                        (Rectangle){ 0, 0, starTexture.width, starTexture.height },
+                                        cellRect, (Vector2){ 0, 0 }, 0, cellColor);
+                                    DrawText(TextFormat("x%.2f", starGame.grid[i][j].multiplier),
+                                        cellRect.x + 10, cellRect.y + 10, 20, BLACK);
+                                }
+                            } else {
+                                DrawRectangleRec(cellRect, cellColor);
+                                DrawTexturePro(hiddenTexture,
+                                    (Rectangle){ 0, 0, hiddenTexture.width, hiddenTexture.height },
+                                    cellRect, (Vector2){ 0, 0 }, 0, cellColor);
+                            }
+
+                            DrawRectangleLines(cellRect.x, cellRect.y, CELL_SIZE, CELL_SIZE, BLACK);
+                        }
+                    }
+
+                    // Draw menu
+                    DrawRectangle(0, 0, MENU_WIDTH, screenHeight, DARKBLUE);
+                    DrawText(TextFormat("Balance: %d", starGame.balance), 20, 100, 25, WHITE);
+                    DrawText(TextFormat("Bet: %d", starGame.currentBet), 20, 130, 25, WHITE);
+                    DrawText(TextFormat("Win: %d", starGame.currentWin), 20, 160, 25, WHITE);
+
+                    // Draw buttons
+                    Rectangle betButton = { 20, 260, 160, 60 };
+                    Rectangle takeButton = { 20, 340, 160, 60 };
+                    Rectangle restartButton = { 20, 420, 160, 60 };
+
+                    if (!starGame.gameOver) {
+                        DrawRectangleRec(betButton, YELLOW);
+                        DrawText(TextFormat("Bet %d", starGame.currentBet),
+                            betButton.x + 40, betButton.y + 20, 20, BLACK);
+
+                        if (starGame.betPlaced) {
+                            DrawRectangleRec(takeButton, GREEN);
+                            DrawText("Take", takeButton.x + 55, takeButton.y + 20, 20, BLACK);
+                        }
+                    }
+
+                    if (starGame.gameOver) {
+                        DrawRectangleRec(restartButton, RED);
+                        DrawText("Restart", restartButton.x + 45, restartButton.y + 20, 20, WHITE);
+                    }
+
+                    DrawText("Press ESC to return to main game", 20, screenHeight - 30, 20, WHITE);
+                EndDrawing();
+                break;
+            }
+        }
+    }
+
+    // Cleanup
+    UnloadTexture(background);
+    UnloadTexture(playerTexture);
+    UnloadTexture(rocketBackground);
+    UnloadTexture(rocketTexture);
+    UnloadTexture(hiddenTexture);
+    UnloadTexture(starTexture);
+    UnloadTexture(bombTexture);
+    UnloadMusicStream(bgMusic);
+    UnloadSound(clickSound);
+    UnloadSound(cashOutSound);
+    UnloadSound(startSound);
+    CloseAudioDevice();
+    CloseWindow();
+
+    return 0;
+}
