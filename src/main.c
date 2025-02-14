@@ -850,7 +850,7 @@ int main(void) {
     Texture2D slotTextures[NUM_SYMBOLS];
     for (int i = 0; i < NUM_SYMBOLS; i++) {
         char filename[20];
-        snprintf(filename, sizeof(filename), "%d.png", i + 1);
+        snprintf(filename, sizeof(filename), "resources/%d.png", i + 1);
         slotTextures[i] = LoadSlotTexture(filename);
     }
 
