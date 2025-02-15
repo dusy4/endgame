@@ -610,7 +610,7 @@ void DrawMainMenu(Rectangle playButton, Rectangle creditsButton, Rectangle quitB
     DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(), DARKGRAY, GRAY);
     
     // Draw title
-    const char* title = "PLACEHOLDER";
+    const char* title = "The Grand Wager";
     int titleFontSize = 60;
     Vector2 titlePos = {
         GetScreenWidth()/2 - MeasureText(title, titleFontSize)/2,
@@ -796,11 +796,11 @@ void DrawCredits(Rectangle backButton, Vector2 mousePos) {
     
     // Draw placeholder credits text
     const char* credits[] = {
-        "Team lead - Dzhuravlenko",
-        "Minesweeper developer - Dzhuravlenko and Vskyrda",
-        "Hippodrome developer - Ykharchenko",
-        "Menu/hub location developer, also combine all games together - Khubko",
-        "menu Design and coding - Vladiukova"
+        "*Team lead - Dzhuravlenko",
+        "*Minesweeper, Rocket - Dzhuravlenko & Vskyrda",
+        "*Hippodrome - Ykharchenko, *Slots - Ahaiduk",
+        "*Menu, combining everything - Khubko",
+        "*Main Menu - Vladiukova"
     };
     
     for (int i = 0; i < 5; i++) {
@@ -823,7 +823,7 @@ int main(void) {
 
 
 
-    InitWindow(screenWidth, screenHeight, "PLACEHOLDER");
+    InitWindow(screenWidth, screenHeight, "The Grand Wager");
     SetTargetFPS(60);
 
     currentGame = MAIN_MENU;
