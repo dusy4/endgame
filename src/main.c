@@ -82,27 +82,27 @@ int CalculatePayout(int* reels, int betAmount, bool* jackpotTriggered, bool* fre
     if (reels[0] == reels[1] && reels[1] == reels[2]) {
         switch (reels[0]) {
         case 0:  // 1.png (jackpot)
-            payout = 1000 * betAmount;
+            payout = 100 * betAmount;
             *jackpotTriggered = true;
             break;
         case 1:  // 2.png (free spins)
-            payout = 500 * betAmount;
+            payout = 50 * betAmount;
             *freeSpinsTriggered = true;
             break;
         case 2:  // 3.png (double win)
-            payout = 250 * betAmount;
+            payout = 25 * betAmount;
             *doubleWinTriggered = true;
             break;
         case 3:  // 4.png (other win)
-            payout = 125 * betAmount;
+            payout = 13 * betAmount;
             *otherWinTriggered = true;
             break;
         case 4:  // 5.png (other win)
-            payout = 65 * betAmount;
+            payout = 6 * betAmount;
             *otherWinTriggered = true;
             break;
         case 5:  // 6.png (other win)
-            payout = 50 * betAmount;
+            payout = 5 * betAmount;
             *otherWinTriggered = true;
             break;
         }
