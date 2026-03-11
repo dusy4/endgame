@@ -2,6 +2,7 @@
 
 A casino-style game built with C and Raylib.
 
+Watch DEMO:
 [![Watch the demo](https://img.youtube.com/vi/zDrPrxbzvnA/maxresdefault.jpg)](https://www.youtube.com/watch?v=zDrPrxbzvnA)
 
 ## Goal
