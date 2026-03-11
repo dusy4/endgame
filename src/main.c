@@ -1,3 +1,20 @@
+/*
+ * ==============================================================================
+ * Project: The Grand Wager
+ * Description: A casino-style game utilizing Raylib.
+ * 
+ * Goal:
+ *   Increase global balance from $1000 to $1,000,000 to reach the Ending.
+ *
+ * Game Logic & Features (State Machine):
+ *   - Main Menu / Credits / Prelude / Ending
+ *   - Rocket Game (Crash): Wait for multiplier to increase, cash out before crash.
+ *   - Star Game (Minesweeper): Reveal stars to up multiplier, avoid bombs.
+ *   - Hippodrome (Horse Racing): Bet on horses with dynamic speeds/probabilities.
+ *   - Slots: 3-reel slot machine with various payouts (jackpots, free spins, etc.)
+ * ==============================================================================
+ */
+
 #include "raylib.h"
 #include <stdio.h>
 #include <stdbool.h>
