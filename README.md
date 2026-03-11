@@ -2,6 +2,8 @@
 
 A casino-style game built with C and Raylib.
 
+[![Watch the demo](https://img.youtube.com/vi/zDrPrxbzvnA/maxresdefault.jpg)](https://www.youtube.com/watch?v=zDrPrxbzvnA)
+
 ## Goal
 Increase your global balance (starting at $1000) by playing various mini-games. The ultimate goal is to reach $1,000,000 to unlock the Ending.
 
